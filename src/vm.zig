@@ -52,6 +52,7 @@ pub const VM = struct {
                     printValue(slot.*);
                     std.debug.print(" ]", .{});
                 }
+                std.debug.print("\n", .{});
 
                 self.chunk.disassembleInstruction(self.ip - &self.chunk.code.items);
             }
