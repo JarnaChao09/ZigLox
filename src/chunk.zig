@@ -4,7 +4,27 @@ const Allocator = std.mem.Allocator;
 const Value = @import("value.zig").Value;
 const printValue = @import("value.zig").printValue;
 
-pub const OpCode = enum(u8) { op_constant, op_return };
+pub const OpCode = enum(u8) {
+    op_constant,
+    op_negate,
+    op_add,
+    op_subtract,
+    op_multiply,
+    op_divide,
+    op_return,
+
+    pub fn asString(self: OpCode) []const u8 {
+        return switch (self) {
+            .op_constant => "OP_CONSTANT",
+            .op_negate => "OP_NEGATE",
+            .op_add => "OP_ADD",
+            .op_subtract => "OP_SUBTRACT",
+            .op_multiply => "OP_MULTIPLY",
+            .op_divide => "OP_DIVIDE",
+            .op_return => "OP_RETURN",
+        };
+    }
+};
 
 pub const Chunk = struct {
     code: ArrayList(u8),
@@ -45,7 +65,7 @@ pub const Chunk = struct {
         while (offset < self.code.items.len) : (offset = self.disassembleInstruction(offset)) {}
     }
 
-    fn disassembleInstruction(self: *Chunk, offset: usize) usize {
+    pub fn disassembleInstruction(self: *Chunk, offset: usize) usize {
         std.debug.print("{d:0>4} ", .{offset});
 
         const current_line = self.lines.items[offset];
@@ -55,17 +75,18 @@ pub const Chunk = struct {
             std.debug.print("{d: >4} ", .{current_line});
         }
 
-        return switch (@as(OpCode, @enumFromInt(self.code.items[offset]))) {
+        const instruction = @as(OpCode, @enumFromInt(self.code.items[offset]));
+        return switch (instruction) {
             .op_constant => blk: {
                 const constant = self.code.items[offset + 1];
-                std.debug.print("{s: <16} {d: >4} ", .{ "OP_CONSTANT", constant });
+                std.debug.print("{s: <16} {d: >4} ", .{ instruction.asString(), constant });
                 printValue(self.constants.items[constant]);
                 std.debug.print("\n", .{});
 
                 break :blk offset + 2;
             },
-            .op_return => blk: {
-                std.debug.print("OP_RETURN\n", .{});
+            .op_negate, .op_add, .op_subtract, .op_multiply, .op_divide, .op_return => blk: {
+                std.debug.print("{s}\n", .{instruction.asString()});
 
                 break :blk offset + 1;
             },
