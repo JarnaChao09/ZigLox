@@ -41,20 +41,33 @@ pub const VM = struct {
     }
 
     fn run(self: *VM) InterpreterResult!void {
+        // required to make debug tracing work
+        // &self.stack[0] != self.stack_top for some reason unless we call reset stack here
+        // potentially this is because arrays are copied...?
+        // resetting the stack inside the init function also leads to different pointer values
+        // so resetting the stack in init does not seem to be an option
+        self.resetStack();
+
         while (true) {
             if (comptime debug_trace_execution) {
-                std.debug.print("          ", .{});
+                std.debug.print("        > ", .{});
 
-                var slot = &self.stack;
+                var slot: [*]Value = &self.stack;
 
-                while (slot < self.stack_top) : (slot += 1) {
+                const len = (@intFromPtr(self.stack_top) - @intFromPtr(&slot[0])) / @sizeOf(f64);
+
+                var count: usize = 0;
+                while (count < len) : ({
+                    slot += 1;
+                    count += 1;
+                }) {
                     std.debug.print("[ ", .{});
-                    printValue(slot.*);
+                    printValue(slot[0]);
                     std.debug.print(" ]", .{});
                 }
                 std.debug.print("\n", .{});
 
-                self.chunk.disassembleInstruction(self.ip - &self.chunk.code.items);
+                _ = self.chunk.disassembleInstruction(@intFromPtr(self.ip) - @intFromPtr(self.chunk.code.items.ptr));
             }
 
             const instruction = @as(OpCode, @enumFromInt(self.readByte()));
@@ -114,4 +127,9 @@ pub const VM = struct {
         self.stack_top -= 1;
         return self.stack_top[0];
     }
+
+    // fn printStackDetails(self: VM) void {
+    //     std.debug.print("stack_top {d}\n", .{@intFromPtr(&self.stack_top[0])});
+    //     std.debug.print("stack bottom {d}\n", .{@intFromPtr(&self.stack[0])});
+    // }
 };
