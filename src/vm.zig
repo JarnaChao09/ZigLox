@@ -4,6 +4,7 @@ const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const printValue = @import("value.zig").printValue;
+const compile = @import("compiler.zig").compile;
 
 const debug_trace_execution = false;
 const stack_max = 256;
@@ -33,11 +34,8 @@ pub const VM = struct {
 
     pub fn deinit(_: *VM) void {}
 
-    pub fn interpret(self: *VM, chunk: *Chunk) InterpreterResult!void {
-        self.chunk = chunk;
-        self.ip = chunk.code.items.ptr;
-
-        try self.run();
+    pub fn interpret(_: *VM, source: []u8, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult)!void {
+        try compile(source, stdout);
     }
 
     fn run(self: *VM) InterpreterResult!void {

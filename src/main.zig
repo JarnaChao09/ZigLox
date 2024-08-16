@@ -1,35 +1,89 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const chunk = @import("chunk.zig");
 const vm = @import("vm.zig");
 
+const DELIMITER = if (builtin.os.tag == .windows) '\r' else '\n';
+
+fn repl(v: *vm.VM, stdin: anytype, stdout: anytype, allocator: std.mem.Allocator) !void {
+    var input = std.ArrayList(u8).init(allocator);
+    defer input.deinit();
+
+    while (true) {
+        input.clearAndFree();
+
+        try stdout.print("> ", .{});
+
+        stdin.streamUntilDelimiter(input.writer(), DELIMITER, null) catch |e| switch (e) {
+            error.EndOfStream => break,
+            else => {
+                try stdout.print("Error: {}", .{e});
+                std.process.exit(74);
+            },
+        };
+
+        const line = if (builtin.os.tag == .windows) std.mem.trimLeft(u8, input.items, '\n') else input;
+
+        if (std.mem.eql(u8, line.items, ":q")) {
+            break;
+        }
+
+        _ = v.interpret(line.items, stdout) catch |e| switch (e) {
+            error.CompilerError => std.process.exit(65),
+            error.RuntimeError => std.process.exit(75),
+            else => return e,
+        };
+    }
+}
+
+fn runFile(path: []u8, v: *vm.VM, stdout: anytype, allocator: std.mem.Allocator) !void {
+    const file = std.fs.cwd().openFile(path, .{}) catch |e| {
+        try stdout.print("Error for file {s}: {}", .{ path, e });
+        std.process.exit(74);
+    };
+    defer file.close();
+
+    const file_size = (file.stat() catch |e| {
+        try stdout.print("Unable to retrieve stats for file {s}: {}", .{ path, e });
+        std.process.exit(74);
+    }).size;
+    const buffer = allocator.alloc(u8, file_size) catch |e| switch (e) {
+        error.OutOfMemory => {
+            try stdout.print("Error, failed to allocate buffer size {d}", .{file_size});
+            std.process.exit(74);
+        },
+    };
+
+    _ = file.readAll(buffer) catch |e| {
+        try stdout.print("Error when reading file {s}: {}", .{ path, e });
+        std.process.exit(74);
+    };
+
+    _ = v.interpret(buffer, stdout) catch |e| switch (e) {
+        error.CompilerError => std.process.exit(65),
+        error.RuntimeError => std.process.exit(75),
+        else => return e,
+    };
+}
+
 pub fn main() !void {
-    var c = chunk.Chunk.init(std.heap.page_allocator);
-    defer c.deinit();
-
-    const constant1 = try c.addConstant(1.2);
-    try c.writeOpCode(.op_constant, 123);
-    try c.write(constant1, 123);
-
-    const constant2 = try c.addConstant(3.4);
-    try c.writeOpCode(.op_constant, 123);
-    try c.write(constant2, 123);
-
-    try c.writeOpCode(.op_add, 123);
-
-    const constant3 = try c.addConstant(5.6);
-    try c.writeOpCode(.op_constant, 123);
-    try c.write(constant3, 123);
-
-    try c.writeOpCode(.op_divide, 123);
-
-    try c.writeOpCode(.op_negate, 123);
-
-    try c.writeOpCode(.op_return, 123);
-
-    c.disassemble("test chunk");
+    const stdin = std.io.getStdIn().reader();
+    const stdout = std.io.getStdOut().writer();
 
     var v = vm.VM.init();
     defer v.deinit();
 
-    try v.interpret(&c);
+    const allocator = std.heap.page_allocator;
+
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    try switch (args.len) {
+        1 => repl(&v, stdin, stdout, allocator),
+        2 => runFile(args[1], &v, stdout, allocator),
+        else => {
+            try stdout.print("Usage: ziglox [path]\n", .{});
+            std.process.exit(64);
+        },
+    };
 }
