@@ -34,7 +34,7 @@ pub const VM = struct {
 
     pub fn deinit(_: *VM) void {}
 
-    pub fn interpret(_: *VM, source: []u8, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult)!void {
+    pub fn interpret(_: *VM, source: []const u8, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult)!void {
         try compile(source, stdout);
     }
 

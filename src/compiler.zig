@@ -1,7 +1,7 @@
 const std = @import("std");
 const Scanner = @import("scanner.zig").Scanner;
 
-pub fn compile(source: []u8, stdout: anytype) @TypeOf(stdout).Error!void {
+pub fn compile(source: []const u8, stdout: anytype) @TypeOf(stdout).Error!void {
     var scanner = Scanner.init(source);
     var line: usize = std.math.maxInt(usize);
 

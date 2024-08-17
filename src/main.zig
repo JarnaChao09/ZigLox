@@ -10,8 +10,6 @@ fn repl(v: *vm.VM, stdin: anytype, stdout: anytype, allocator: std.mem.Allocator
     defer input.deinit();
 
     while (true) {
-        input.clearAndFree();
-
         try stdout.print("> ", .{});
 
         stdin.streamUntilDelimiter(input.writer(), DELIMITER, null) catch |e| switch (e) {
@@ -22,13 +20,17 @@ fn repl(v: *vm.VM, stdin: anytype, stdout: anytype, allocator: std.mem.Allocator
             },
         };
 
-        const line = if (builtin.os.tag == .windows) std.mem.trimLeft(u8, input.items, '\n') else input;
+        const line: []const u8 = if (builtin.os.tag == .windows) blk: {
+            break :blk std.mem.trimLeft(u8, input.toOwnedSliceSentinel(0), '\n');
+        } else blk: {
+            break :blk try input.toOwnedSliceSentinel(0);
+        };
 
-        if (std.mem.eql(u8, line.items, ":q")) {
+        if (std.mem.eql(u8, line, ":q")) {
             break;
         }
 
-        _ = v.interpret(line.items, stdout) catch |e| switch (e) {
+        _ = v.interpret(line, stdout) catch |e| switch (e) {
             error.CompilerError => std.process.exit(65),
             error.RuntimeError => std.process.exit(75),
             else => return e,

@@ -3,11 +3,11 @@ const Token = @import("token.zig").Token;
 const TokenType = @import("token.zig").TokenType;
 
 pub const Scanner = struct {
-    start: [*]u8,
-    current: [*]u8,
+    start: [*]const u8,
+    current: [*]const u8,
     line: usize,
 
-    pub fn init(source: []u8) Scanner {
+    pub fn init(source: []const u8) Scanner {
         return Scanner{
             .start = source.ptr,
             .current = source.ptr,
