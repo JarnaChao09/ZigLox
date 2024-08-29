@@ -20,6 +20,8 @@ fn repl(v: *vm.VM, stdin: anytype, stdout: anytype, allocator: std.mem.Allocator
             },
         };
 
+        // must state that slice is sentinel terminated, or else allocator.free will
+        // report unequal free sizes
         const line: [:0]const u8 = if (builtin.os.tag == .windows) blk: {
             break :blk std.mem.trimLeft(u8, input.toOwnedSliceSentinel(0), '\n');
         } else blk: {
