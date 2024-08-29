@@ -20,11 +20,12 @@ fn repl(v: *vm.VM, stdin: anytype, stdout: anytype, allocator: std.mem.Allocator
             },
         };
 
-        const line: []const u8 = if (builtin.os.tag == .windows) blk: {
+        const line: [:0]const u8 = if (builtin.os.tag == .windows) blk: {
             break :blk std.mem.trimLeft(u8, input.toOwnedSliceSentinel(0), '\n');
         } else blk: {
             break :blk try input.toOwnedSliceSentinel(0);
         };
+        defer allocator.free(line);
 
         if (std.mem.eql(u8, line, ":q")) {
             break;
@@ -75,7 +76,15 @@ pub fn main() !void {
     var v = vm.VM.init();
     defer v.deinit();
 
-    const allocator = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+
+    defer {
+        const deinit_status = gpa.deinit();
+        if (deinit_status != .ok) {
+            std.debug.print("allocation deinit failure with {}\n", .{deinit_status});
+        }
+    }
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
