@@ -33,7 +33,7 @@ fn repl(v: *vm.VM, stdin: anytype, stdout: anytype, allocator: std.mem.Allocator
             break;
         }
 
-        _ = v.interpret(line, stdout) catch |e| switch (e) {
+        _ = v.interpret(line, allocator, stdout) catch |e| switch (e) {
             error.CompilerError => std.process.exit(65),
             error.RuntimeError => std.process.exit(75),
             else => return e,
@@ -64,7 +64,7 @@ fn runFile(path: []u8, v: *vm.VM, stdout: anytype, allocator: std.mem.Allocator)
         std.process.exit(74);
     };
 
-    _ = v.interpret(buffer, stdout) catch |e| switch (e) {
+    _ = v.interpret(buffer, allocator, stdout) catch |e| switch (e) {
         error.CompilerError => std.process.exit(65),
         error.RuntimeError => std.process.exit(75),
         else => return e,

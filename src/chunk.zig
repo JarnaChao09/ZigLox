@@ -13,6 +13,7 @@ pub const OpCode = enum(u8) {
     op_divide,
     op_return,
 
+    // TODO: update to format method
     pub fn asString(self: OpCode) []const u8 {
         return switch (self) {
             .op_constant => "OP_CONSTANT",
@@ -42,6 +43,7 @@ pub const Chunk = struct {
     pub fn deinit(self: *Chunk) void {
         self.code.deinit();
         self.constants.deinit();
+        self.lines.deinit();
     }
 
     pub fn write(self: *Chunk, byte: u8, line: usize) !void {
@@ -53,12 +55,13 @@ pub const Chunk = struct {
         try self.write(@intFromEnum(op), line);
     }
 
-    pub fn addConstant(self: *Chunk, value: Value) !u8 {
+    pub fn addConstant(self: *Chunk, value: Value) !usize {
         try self.constants.append(value);
-        return @intCast(self.constants.items.len - 1);
+        return self.constants.items.len - 1;
     }
 
     pub fn disassemble(self: *Chunk, name: []const u8) void {
+        // TODO: figure out how to hold Writer types in structs
         std.debug.print("=== {s} ===\n", .{name});
 
         var offset: usize = 0;
@@ -66,12 +69,15 @@ pub const Chunk = struct {
     }
 
     pub fn disassembleInstruction(self: *Chunk, offset: usize) usize {
+        // TODO: figure out how to hold Writer types in structs
         std.debug.print("{d:0>4} ", .{offset});
 
         const current_line = self.lines.items[offset];
         if (offset > 0 and current_line == self.lines.items[offset - 1]) {
+            // TODO: figure out how to hold Writer types in structs
             std.debug.print("   | ", .{});
         } else {
+            // TODO: figure out how to hold Writer types in structs
             std.debug.print("{d: >4} ", .{current_line});
         }
 
@@ -79,13 +85,16 @@ pub const Chunk = struct {
         return switch (instruction) {
             .op_constant => blk: {
                 const constant = self.code.items[offset + 1];
+                // TODO: figure out how to hold Writer types in structs
                 std.debug.print("{s: <16} {d: >4} ", .{ instruction.asString(), constant });
                 printValue(self.constants.items[constant]);
+                // TODO: figure out how to hold Writer types in structs
                 std.debug.print("\n", .{});
 
                 break :blk offset + 2;
             },
             .op_negate, .op_add, .op_subtract, .op_multiply, .op_divide, .op_return => blk: {
+                // TODO: figure out how to hold Writer types in structs
                 std.debug.print("{s}\n", .{instruction.asString()});
 
                 break :blk offset + 1;

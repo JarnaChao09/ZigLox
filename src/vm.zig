@@ -5,6 +5,7 @@ const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const printValue = @import("value.zig").printValue;
 const compile = @import("compiler.zig").compile;
+const ParserError = @import("compiler.zig").Parser.ParserError;
 
 const debug_trace_execution = false;
 const stack_max = 256;
@@ -34,8 +35,21 @@ pub const VM = struct {
 
     pub fn deinit(_: *VM) void {}
 
-    pub fn interpret(_: *VM, source: []const u8, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult)!void {
-        try compile(source, stdout);
+    pub fn interpret(self: *VM, source: []const u8, allocator: Allocator, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult || Allocator.Error || ParserError)!void {
+        var chunk = Chunk.init(allocator);
+        defer chunk.deinit();
+
+        if (!(compile(source, &chunk, stdout) catch |err| blk: {
+            try stdout.print("Error during compilation {}\n", .{err});
+            break :blk false;
+        })) {
+            return InterpreterResult.CompilerError;
+        }
+
+        self.chunk = &chunk;
+        self.ip = self.chunk.code.items.ptr;
+
+        try self.run();
     }
 
     fn run(self: *VM) InterpreterResult!void {
