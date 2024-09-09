@@ -23,7 +23,7 @@ pub const VM = struct {
 
     pub fn init() VM {
         const static = struct {
-            var stack: [stack_max]Value = [_]Value{0.0} ** stack_max;
+            var stack: [stack_max]Value = [_]Value{.nil} ** stack_max;
         };
         return VM{
             .chunk = undefined,
@@ -66,7 +66,7 @@ pub const VM = struct {
 
                 var slot: [*]Value = &self.stack;
 
-                const len = (@intFromPtr(self.stack_top) - @intFromPtr(&slot[0])) / @sizeOf(f64);
+                const len = (@intFromPtr(self.stack_top) - @intFromPtr(&slot[0])) / @sizeOf(Value);
 
                 var count: usize = 0;
                 while (count < len) : ({
@@ -89,20 +89,82 @@ pub const VM = struct {
                     const constant = self.readConstant();
                     self.push(constant);
                 },
-                .op_negate => {
-                    self.push(-self.pop());
+                .op_nil => {
+                    self.push(Value{ .nil = undefined });
+                },
+                .op_true => {
+                    self.push(Value.fromBool(true));
+                },
+                .op_false => {
+                    self.push(Value.fromBool(false));
+                },
+                .op_equal => {
+                    const b = self.pop();
+                    (self.stack_top - 1)[0] = Value.fromBool(self.peek(0).equals(b));
+                },
+                .op_greater => {
+                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+                        self.runtimeErr("Operands must be numbers.", .{});
+                        return InterpreterResult.RuntimeError;
+                    }
+
+                    const b = self.pop().number;
+                    const a = self.pop().number;
+                    self.push(Value.fromBool(a > b));
+                },
+                .op_less => {
+                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+                        self.runtimeErr("Operands must be numbers.", .{});
+                        return InterpreterResult.RuntimeError;
+                    }
+
+                    const b = self.pop().number;
+                    const a = self.pop().number;
+                    self.push(Value.fromBool(a < b));
                 },
                 .op_add => {
-                    (self.stack_top - 2)[0] += self.pop();
+                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+                        self.runtimeErr("Operands must be numbers.", .{});
+                        return InterpreterResult.RuntimeError;
+                    }
+
+                    (self.stack_top - 2)[0].number += self.pop().number;
                 },
                 .op_subtract => {
-                    (self.stack_top - 2)[0] -= self.pop();
+                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+                        self.runtimeErr("Operands must be numbers.", .{});
+                        return InterpreterResult.RuntimeError;
+                    }
+
+                    (self.stack_top - 2)[0].number -= self.pop().number;
                 },
                 .op_multiply => {
-                    (self.stack_top - 2)[0] *= self.pop();
+                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+                        self.runtimeErr("Operands must be numbers.", .{});
+                        return InterpreterResult.RuntimeError;
+                    }
+
+                    (self.stack_top - 2)[0].number *= self.pop().number;
                 },
                 .op_divide => {
-                    (self.stack_top - 2)[0] /= self.pop();
+                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
+                        self.runtimeErr("Operands must be numbers.", .{});
+                        return InterpreterResult.RuntimeError;
+                    }
+
+                    (self.stack_top - 2)[0].number /= self.pop().number;
+                },
+                .op_not => {
+                    (self.stack_top - 1)[0] = Value.fromBool(self.peek(0).isFalsey());
+                },
+                .op_negate => {
+                    switch (self.peek(0)) {
+                        .number => |val| (self.stack_top - 1)[0].number = -val,
+                        else => {
+                            self.runtimeErr("Operand must be a number.", .{});
+                            return InterpreterResult.RuntimeError;
+                        },
+                    }
                 },
                 .op_return => {
                     printValue(self.pop());
@@ -130,6 +192,16 @@ pub const VM = struct {
         self.stack_top = &self.stack;
     }
 
+    fn runtimeErr(self: *VM, comptime fmt: []const u8, args: anytype) void {
+        // TODO: figure out how to hold Writer types in structs
+
+        std.debug.print(fmt, args);
+
+        const instruction = @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.items.ptr) - 1;
+        std.debug.print("\n[line {d}] in script\n", .{self.chunk.lines.items[instruction]});
+        self.resetStack();
+    }
+
     fn push(self: *VM, value: Value) void {
         self.stack_top[0] = value;
         self.stack_top += 1;
@@ -138,6 +210,10 @@ pub const VM = struct {
     fn pop(self: *VM) Value {
         self.stack_top -= 1;
         return self.stack_top[0];
+    }
+
+    fn peek(self: *VM, distance: usize) Value {
+        return (self.stack_top - 1 - distance)[0];
     }
 
     // fn printStackDetails(self: VM) void {

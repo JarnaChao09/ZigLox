@@ -40,31 +40,31 @@ pub const Parser = struct {
         .semicolon = ParseRule{ .prefix = null, .infix = undefined, .precedence = .prec_none },
         .slash = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_factor },
         .star = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_factor },
-        .bang = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .bang_equal = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
+        .bang = ParseRule{ .prefix = &Parser.unary, .infix = null, .precedence = .prec_none },
+        .bang_equal = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_equality },
         .equal = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .equal_equal = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .greater = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .greater_equal = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .less = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .less_equal = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
+        .equal_equal = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_equality },
+        .greater = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_comparison },
+        .greater_equal = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_comparison },
+        .less = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_comparison },
+        .less_equal = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_comparison },
         .identifier = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .string = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .number = ParseRule{ .prefix = &Parser.number, .infix = null, .precedence = .prec_none },
         .tk_and = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .class = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .tk_else = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .tk_false = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
+        .tk_false = ParseRule{ .prefix = &Parser.literal, .infix = null, .precedence = .prec_none },
         .tk_for = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .fun = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .tk_if = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .nil = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
+        .nil = ParseRule{ .prefix = &Parser.literal, .infix = null, .precedence = .prec_none },
         .tk_or = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .print = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .tk_return = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .super = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .this = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .tk_true = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
+        .tk_true = ParseRule{ .prefix = &Parser.literal, .infix = null, .precedence = .prec_none },
         .tk_var = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .tk_while = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .tk_error = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
@@ -164,6 +164,11 @@ pub const Parser = struct {
         try self.chunk.writeOpCode(op, self.previous.line);
     }
 
+    fn emitOpCodes(self: *Parser, op1: OpCode, op2: OpCode) ParserError!void {
+        try self.emitOpCode(op1);
+        try self.emitOpCode(op2);
+    }
+
     fn emitReturn(self: *Parser) ParserError!void {
         try self.emitOpCode(.op_return);
     }
@@ -202,8 +207,8 @@ pub const Parser = struct {
     }
 
     fn number(self: *Parser) ParserError!void {
-        const value: Value = try std.fmt.parseFloat(Value, self.previous.start[0..self.previous.len]);
-        try self.emitConstant(value);
+        const value = try std.fmt.parseFloat(f64, self.previous.start[0..self.previous.len]);
+        try self.emitConstant(Value.fromNumber(value));
     }
 
     fn unary(self: *Parser) ParserError!void {
@@ -212,6 +217,7 @@ pub const Parser = struct {
         try self.parsePrecedence(@intFromEnum(Precedence.prec_unary));
 
         try switch (operator_type) {
+            .bang => self.emitOpCode(.op_not),
             .minus => self.emitOpCode(.op_negate),
             else => unreachable,
         };
@@ -223,10 +229,25 @@ pub const Parser = struct {
         try self.parsePrecedence(@intFromEnum(rule.precedence) + 1);
 
         try switch (operator_type) {
+            .bang_equal => self.emitOpCodes(.op_equal, .op_not),
+            .equal_equal => self.emitOpCode(.op_equal),
+            .greater => self.emitOpCode(.op_greater),
+            .greater_equal => self.emitOpCodes(.op_less, .op_not),
+            .less => self.emitOpCode(.op_less),
+            .less_equal => self.emitOpCodes(.op_greater, .op_not),
             .plus => self.emitOpCode(.op_add),
             .minus => self.emitOpCode(.op_subtract),
             .star => self.emitOpCode(.op_multiply),
             .slash => self.emitOpCode(.op_divide),
+            else => unreachable,
+        };
+    }
+
+    fn literal(self: *Parser) ParserError!void {
+        try switch (self.previous.type) {
+            .tk_false => self.emitOpCode(.op_false),
+            .nil => self.emitOpCode(.op_nil),
+            .tk_true => self.emitOpCode(.op_true),
             else => unreachable,
         };
     }
