@@ -52,12 +52,13 @@ fn runFile(path: []u8, v: *vm.VM, stdout: anytype, allocator: std.mem.Allocator)
         try stdout.print("Unable to retrieve stats for file {s}: {}", .{ path, e });
         std.process.exit(74);
     }).size;
-    const buffer = allocator.alloc(u8, file_size) catch |e| switch (e) {
+    const buffer = allocator.allocSentinel(u8, file_size, 0) catch |e| switch (e) {
         error.OutOfMemory => {
             try stdout.print("Error, failed to allocate buffer size {d}", .{file_size});
             std.process.exit(74);
         },
     };
+    defer allocator.free(buffer);
 
     _ = file.readAll(buffer) catch |e| {
         try stdout.print("Error when reading file {s}: {}", .{ path, e });
