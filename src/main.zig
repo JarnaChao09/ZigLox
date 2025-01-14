@@ -76,18 +76,20 @@ pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
-    var v = vm.VM.init();
-    defer v.deinit();
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
+    // reminder: defers are executed in reverse order
+    // gpa reported "leaks" since gpa.deinit happened before vm.deinit
     defer {
         const deinit_status = gpa.deinit();
         if (deinit_status != .ok) {
             std.debug.print("allocation deinit failure with {}\n", .{deinit_status});
         }
     }
+
+    var v = vm.VM.init(allocator);
+    defer v.deinit();
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);

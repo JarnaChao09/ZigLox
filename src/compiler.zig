@@ -6,8 +6,11 @@ const Token = @import("token.zig").Token;
 const TokenType = @import("token.zig").TokenType;
 const Scanner = @import("scanner.zig").Scanner;
 const Value = @import("value.zig").Value;
+const VM = @import("vm.zig").VM;
+const Obj = @import("object.zig").Obj;
+const ObjString = @import("object.zig").ObjString;
 
-const debug_print_code = false;
+const debug_print_code = true;
 
 const Precedence = enum(u8) {
     prec_none,
@@ -49,7 +52,7 @@ pub const Parser = struct {
         .less = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_comparison },
         .less_equal = ParseRule{ .prefix = null, .infix = &Parser.binary, .precedence = .prec_comparison },
         .identifier = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
-        .string = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
+        .string = ParseRule{ .prefix = &Parser.string, .infix = null, .precedence = .prec_none },
         .number = ParseRule{ .prefix = &Parser.number, .infix = null, .precedence = .prec_none },
         .tk_and = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
         .class = ParseRule{ .prefix = null, .infix = null, .precedence = .prec_none },
@@ -80,7 +83,9 @@ pub const Parser = struct {
     // TODO: figure out how to hold Writer types in structs
     // errorWriter: std.io.AnyWriter,
 
-    pub fn init(scanner: *Scanner, chunk: *Chunk) Parser {
+    vm: *VM,
+
+    pub fn init(scanner: *Scanner, chunk: *Chunk, vm: *VM) Parser {
         return Parser{
             .current = undefined,
             .previous = undefined,
@@ -88,6 +93,7 @@ pub const Parser = struct {
             .panicMode = false,
             .chunk = chunk,
             .scanner = scanner,
+            .vm = vm,
         };
     }
 
@@ -211,6 +217,10 @@ pub const Parser = struct {
         try self.emitConstant(Value.fromNumber(value));
     }
 
+    fn string(self: *Parser) ParserError!void {
+        try self.emitConstant(ObjString.copy(self.vm, self.previous.start[1 .. self.previous.len - 1]).obj.asValue());
+    }
+
     fn unary(self: *Parser) ParserError!void {
         const operator_type = self.previous.type;
 
@@ -277,10 +287,10 @@ pub const Parser = struct {
     }
 };
 
-pub fn compile(source: []const u8, chunk: *Chunk, stdout: anytype) (@TypeOf(stdout).Error || Parser.ParserError)!bool {
+pub fn compile(source: []const u8, chunk: *Chunk, vm: *VM, stdout: anytype) (@TypeOf(stdout).Error || Parser.ParserError)!bool {
     var scanner = Scanner.init(source);
 
-    var parser = Parser.init(&scanner, chunk);
+    var parser = Parser.init(&scanner, chunk, vm);
 
     parser.advance();
     try parser.expression();

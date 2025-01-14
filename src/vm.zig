@@ -4,10 +4,12 @@ const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const printValue = @import("value.zig").printValue;
+const Obj = @import("object.zig").Obj;
+const ObjString = @import("object.zig").ObjString;
 const compile = @import("compiler.zig").compile;
 const ParserError = @import("compiler.zig").Parser.ParserError;
 
-const debug_trace_execution = false;
+const debug_trace_execution = true;
 const stack_max = 256;
 
 pub const InterpreterResult = error{
@@ -21,7 +23,10 @@ pub const VM = struct {
     stack: [stack_max]Value,
     stack_top: [*]Value,
 
-    pub fn init() VM {
+    allocator: Allocator,
+    objects: ?*Obj,
+
+    pub fn init(allocator: Allocator) VM {
         const static = struct {
             var stack: [stack_max]Value = [_]Value{.nil} ** stack_max;
         };
@@ -30,16 +35,30 @@ pub const VM = struct {
             .ip = undefined,
             .stack = static.stack,
             .stack_top = &static.stack,
+            .allocator = allocator,
+            .objects = null,
         };
     }
 
-    pub fn deinit(_: *VM) void {}
+    fn freeObjects(self: *VM) void {
+        var object = self.objects;
+
+        while (object) |obj| {
+            const next = obj.*.next;
+            obj.destroy(self);
+            object = next;
+        }
+    }
+
+    pub fn deinit(self: *VM) void {
+        self.freeObjects();
+    }
 
     pub fn interpret(self: *VM, source: []const u8, allocator: Allocator, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult || Allocator.Error || ParserError)!void {
         var chunk = Chunk.init(allocator);
         defer chunk.deinit();
 
-        if (!(compile(source, &chunk, stdout) catch |err| blk: {
+        if (!(compile(source, &chunk, self, stdout) catch |err| blk: {
             try stdout.print("Error during compilation {}\n", .{err});
             break :blk false;
         })) {
@@ -123,12 +142,14 @@ pub const VM = struct {
                     self.push(Value.fromBool(a < b));
                 },
                 .op_add => {
-                    if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
-                        self.runtimeErr("Operands must be numbers.", .{});
+                    if (self.peek(0).isObject(.String) and self.peek(1).isObject(.String)) {
+                        self.concatenate();
+                    } else if (self.peek(0).isNumber() or self.peek(1).isNumber()) {
+                        (self.stack_top - 2)[0].number += self.pop().number;
+                    } else {
+                        self.runtimeErr("Operands must be two numbers or two strings.", .{});
                         return InterpreterResult.RuntimeError;
                     }
-
-                    (self.stack_top - 2)[0].number += self.pop().number;
                 },
                 .op_subtract => {
                     if (!self.peek(0).isNumber() or !self.peek(1).isNumber()) {
@@ -214,6 +235,15 @@ pub const VM = struct {
 
     fn peek(self: *VM, distance: usize) Value {
         return (self.stack_top - 1 - distance)[0];
+    }
+
+    fn concatenate(self: *VM) void {
+        const b = self.pop().object.asString().chars;
+        const a = self.pop().object.asString().chars;
+
+        const ret = std.mem.concat(self.allocator, u8, &.{ a, b }) catch std.process.exit(201);
+
+        self.push(ObjString.create(self, ret).obj.asValue());
     }
 
     // fn printStackDetails(self: VM) void {

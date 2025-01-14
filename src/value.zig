@@ -1,8 +1,12 @@
 const std = @import("std");
+const Obj = @import("object.zig").Obj;
+const ObjType = @import("object.zig").ObjType;
+
 pub const Value = union(enum) {
     bool: bool,
     nil,
     number: f64,
+    object: *Obj,
 
     pub inline fn fromBool(value: bool) Value {
         return Value{ .bool = value };
@@ -10,6 +14,10 @@ pub const Value = union(enum) {
 
     pub inline fn fromNumber(value: f64) Value {
         return Value{ .number = value };
+    }
+
+    pub inline fn fromObject(value: *Obj) Value {
+        return Value{ .object = value };
     }
 
     pub inline fn isBool(self: Value) bool {
@@ -33,6 +41,13 @@ pub const Value = union(enum) {
         };
     }
 
+    pub inline fn isObject(self: Value, objtype: ObjType) bool {
+        return switch (self) {
+            .object => self.object.*.is(objtype),
+            else => false,
+        };
+    }
+
     pub inline fn isFalsey(self: Value) bool {
         return self.isNil() or (self.isBool() and !self.bool);
     }
@@ -51,6 +66,15 @@ pub const Value = union(enum) {
                 .number => |r| l == r,
                 else => false,
             },
+            .object => |l| switch (other) {
+                .object => |r| blk: {
+                    const a_string = l.asString().chars;
+                    const b_string = r.asString().chars;
+
+                    break :blk a_string.len == b_string.len and std.mem.eql(u8, a_string, b_string);
+                },
+                else => false,
+            },
         };
     }
 };
@@ -65,6 +89,11 @@ pub fn printValue(value: Value) void {
         },
         .number => |val| {
             std.debug.print("{d}", .{val});
+        },
+        .object => |object| switch (object.obj_type) {
+            .String => {
+                std.debug.print("{s}", .{object.asString().chars});
+            },
         },
     }
 }
