@@ -6,7 +6,7 @@ const Token = @import("token.zig").Token;
 const TokenType = @import("token.zig").TokenType;
 const Scanner = @import("scanner.zig").Scanner;
 const Value = @import("value.zig").Value;
-const VM = @import("vm.zig").VM;
+const LoxContext = @import("context.zig").LoxContext;
 const Obj = @import("object.zig").Obj;
 const ObjString = @import("object.zig").ObjString;
 
@@ -83,9 +83,9 @@ pub const Parser = struct {
     // TODO: figure out how to hold Writer types in structs
     // errorWriter: std.io.AnyWriter,
 
-    vm: *VM,
+    ctx: *LoxContext,
 
-    pub fn init(scanner: *Scanner, chunk: *Chunk, vm: *VM) Parser {
+    pub fn init(scanner: *Scanner, chunk: *Chunk, ctx: *LoxContext) Parser {
         return Parser{
             .current = undefined,
             .previous = undefined,
@@ -93,7 +93,7 @@ pub const Parser = struct {
             .panicMode = false,
             .chunk = chunk,
             .scanner = scanner,
-            .vm = vm,
+            .ctx = ctx,
         };
     }
 
@@ -218,7 +218,7 @@ pub const Parser = struct {
     }
 
     fn string(self: *Parser) ParserError!void {
-        try self.emitConstant(ObjString.copy(self.vm, self.previous.start[1 .. self.previous.len - 1]).obj.asValue());
+        try self.emitConstant(ObjString.copy(self.ctx, self.previous.start[1 .. self.previous.len - 1]).obj.asValue());
     }
 
     fn unary(self: *Parser) ParserError!void {
@@ -287,10 +287,10 @@ pub const Parser = struct {
     }
 };
 
-pub fn compile(source: []const u8, chunk: *Chunk, vm: *VM, stdout: anytype) (@TypeOf(stdout).Error || Parser.ParserError)!bool {
+pub fn compile(source: []const u8, chunk: *Chunk, ctx: *LoxContext, stdout: anytype) (@TypeOf(stdout).Error || Parser.ParserError)!bool {
     var scanner = Scanner.init(source);
 
-    var parser = Parser.init(&scanner, chunk, vm);
+    var parser = Parser.init(&scanner, chunk, ctx);
 
     parser.advance();
     try parser.expression();

@@ -8,6 +8,7 @@ const Obj = @import("object.zig").Obj;
 const ObjString = @import("object.zig").ObjString;
 const compile = @import("compiler.zig").compile;
 const ParserError = @import("compiler.zig").Parser.ParserError;
+const LoxContext = @import("context.zig").LoxContext;
 
 const debug_trace_execution = true;
 const stack_max = 256;
@@ -23,10 +24,9 @@ pub const VM = struct {
     stack: [stack_max]Value,
     stack_top: [*]Value,
 
-    allocator: Allocator,
-    objects: ?*Obj,
+    ctx: *LoxContext,
 
-    pub fn init(allocator: Allocator) VM {
+    pub fn init(ctx: *LoxContext) VM {
         const static = struct {
             var stack: [stack_max]Value = [_]Value{.nil} ** stack_max;
         };
@@ -35,30 +35,19 @@ pub const VM = struct {
             .ip = undefined,
             .stack = static.stack,
             .stack_top = &static.stack,
-            .allocator = allocator,
-            .objects = null,
+            .ctx = ctx,
         };
     }
 
-    fn freeObjects(self: *VM) void {
-        var object = self.objects;
-
-        while (object) |obj| {
-            const next = obj.*.next;
-            obj.destroy(self);
-            object = next;
-        }
-    }
-
     pub fn deinit(self: *VM) void {
-        self.freeObjects();
+        self.ctx.freeObjects();
     }
 
     pub fn interpret(self: *VM, source: []const u8, allocator: Allocator, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult || Allocator.Error || ParserError)!void {
         var chunk = Chunk.init(allocator);
         defer chunk.deinit();
 
-        if (!(compile(source, &chunk, self, stdout) catch |err| blk: {
+        if (!(compile(source, &chunk, self.ctx, stdout) catch |err| blk: {
             try stdout.print("Error during compilation {}\n", .{err});
             break :blk false;
         })) {
@@ -241,9 +230,9 @@ pub const VM = struct {
         const b = self.pop().object.asString().chars;
         const a = self.pop().object.asString().chars;
 
-        const ret = std.mem.concat(self.allocator, u8, &.{ a, b }) catch std.process.exit(201);
+        const ret = std.mem.concat(self.ctx.allocator, u8, &.{ a, b }) catch std.process.exit(201);
 
-        self.push(ObjString.create(self, ret).obj.asValue());
+        self.push(ObjString.take(self.ctx, ret).obj.asValue());
     }
 
     // fn printStackDetails(self: VM) void {

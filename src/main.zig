@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const chunk = @import("chunk.zig");
+const context = @import("context.zig");
 const vm = @import("vm.zig");
 
 const DELIMITER = if (builtin.os.tag == .windows) '\r' else '\n';
@@ -88,7 +89,10 @@ pub fn main() !void {
         }
     }
 
-    var v = vm.VM.init(allocator);
+    var ctx = context.LoxContext.init(allocator);
+    defer ctx.deinit();
+
+    var v = vm.VM.init(&ctx);
     defer v.deinit();
 
     const args = try std.process.argsAlloc(allocator);
