@@ -68,10 +68,18 @@ pub const Value = union(enum) {
             },
             .object => |l| switch (other) {
                 .object => |r| blk: {
-                    const a_string = l.asString().chars;
-                    const b_string = r.asString().chars;
+                    break :blk l == r;
+                    // thanks to string interning
+                    // these pointers will be equal if the strings are equal
+                    // otherwise, these pointers point to different allocated
+                    // objects, meaning that either
+                    // a. interning has failed
+                    // b. the strings are not equal
 
-                    break :blk a_string.len == b_string.len and std.mem.eql(u8, a_string, b_string);
+                    // const a_string = l.asString().chars;
+                    // const b_string = r.asString().chars;
+
+                    // break :blk a_string.len == b_string.len and std.mem.eql(u8, a_string, b_string);
                 },
                 else => false,
             },

@@ -47,30 +47,48 @@ pub const Obj = struct {
     }
 };
 
+const hashFunc = std.hash.Fnv1a_32.hash;
+
 pub const ObjString = struct {
     obj: Obj,
     chars: []const u8,
+    hash: u32,
 
-    pub fn create(ctx: *LoxContext, str: []const u8) *ObjString {
+    pub fn create(ctx: *LoxContext, str: []const u8, hash: u32) *ObjString {
         const obj = Obj.allocate(ctx, ObjString, .String);
         const ret = obj.asString();
 
-        ret.* = ObjString{ .obj = obj.*, .chars = str };
+        ret.* = ObjString{ .obj = obj.*, .chars = str, .hash = hash };
+
+        _ = ctx.strings.set(ret, Value { .nil = undefined });
 
         return ret;
     }
 
     pub fn copy(ctx: *LoxContext, source: []const u8) *ObjString {
+        const hash = hashFunc(source);
+        
+        if (ctx.strings.findString(source, hash)) |interned| {
+            return interned;
+        }
+
         const buffer = ctx.allocator.alloc(u8, source.len) catch {
             std.debug.print("OOME: can not allocate string", .{});
             std.process.exit(200);
         };
         std.mem.copyForwards(u8, buffer, source);
-        return ObjString.create(ctx, buffer);
+        return ObjString.create(ctx, buffer, hash);
     }
 
     pub fn take(ctx: *LoxContext, source: []const u8) *ObjString {
-        return ObjString.create(ctx, source);
+        const hash = hashFunc(source);
+
+        if (ctx.strings.findString(source, hash)) |interned| {
+            ctx.allocator.free(source);
+            return interned;
+        }
+
+        return ObjString.create(ctx, source, hash);
     }
 
     pub fn destroy(self: *ObjString, ctx: *LoxContext) void {
