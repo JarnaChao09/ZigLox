@@ -9,6 +9,7 @@ const ObjString = @import("object.zig").ObjString;
 const compile = @import("compiler.zig").compile;
 const ParserError = @import("compiler.zig").Parser.ParserError;
 const LoxContext = @import("context.zig").LoxContext;
+const Table = @import("table.zig").Table;
 
 const debug_trace_execution = true;
 const stack_max = 256;
@@ -23,6 +24,7 @@ pub const VM = struct {
     ip: [*]u8,
     stack: [stack_max]Value,
     stack_top: [*]Value,
+    globals: Table,
 
     ctx: *LoxContext,
 
@@ -35,12 +37,14 @@ pub const VM = struct {
             .ip = undefined,
             .stack = static.stack,
             .stack_top = &static.stack,
+            .globals = Table.init(ctx.allocator),
             .ctx = ctx,
         };
     }
 
     pub fn deinit(self: *VM) void {
         self.ctx.freeObjects();
+        self.globals.deinit();
     }
 
     pub fn interpret(self: *VM, source: []const u8, allocator: Allocator, stdout: anytype) (@TypeOf(stdout).Error || InterpreterResult || Allocator.Error || ParserError)!void {
@@ -105,6 +109,33 @@ pub const VM = struct {
                 },
                 .op_false => {
                     self.push(Value.fromBool(false));
+                },
+                .op_pop => {
+                    _ = self.pop();
+                },
+                .op_get_global => {
+                    const name = self.readConstant().object.asString();
+                    const value = self.globals.get(name) orelse {
+                        self.runtimeErr("Undefined variable '{s}'.", .{name.chars});
+                        return InterpreterResult.RuntimeError;
+                    };
+
+                    self.push(value);
+                },
+                .op_define_global => {
+                    const name = self.readConstant().object.asString();
+
+                    _ = self.globals.set(name, self.peek(0));
+
+                    _ = self.pop();
+                },
+                .op_set_global => {
+                    const name = self.readConstant().object.asString();
+                    if (self.globals.set(name, self.peek(0))) {
+                        _ = self.globals.delete(name);
+                        self.runtimeErr("Undefined variable '{s}'.", .{name.chars});
+                        return InterpreterResult.RuntimeError;
+                    }
                 },
                 .op_equal => {
                     const b = self.pop();
@@ -176,9 +207,11 @@ pub const VM = struct {
                         },
                     }
                 },
-                .op_return => {
+                .op_print => {
                     printValue(self.pop());
                     std.debug.print("\n", .{});
+                },
+                .op_return => {
                     return;
                 },
             }

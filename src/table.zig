@@ -68,6 +68,6 @@ pub const Table = struct {
     }
 
     pub fn delete(self: *Table, key: *ObjString) bool {
-        self.backing_map.remove(key);
+        return self.backing_map.remove(key);
     }
 };

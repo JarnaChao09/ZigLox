@@ -9,6 +9,10 @@ pub const OpCode = enum(u8) {
     op_nil,
     op_true,
     op_false,
+    op_pop,
+    op_get_global,
+    op_define_global,
+    op_set_global,
     op_equal,
     op_greater,
     op_less,
@@ -18,6 +22,7 @@ pub const OpCode = enum(u8) {
     op_divide,
     op_not,
     op_negate,
+    op_print,
     op_return,
 
     // TODO: update to format method
@@ -27,6 +32,10 @@ pub const OpCode = enum(u8) {
             .op_nil => "OP_NIL",
             .op_true => "OP_TRUE",
             .op_false => "OP_FALSE",
+            .op_pop => "OP_POP",
+            .op_get_global => "OP_GET_GLOBAL",
+            .op_define_global => "OP_DEFINE_GLOBAL",
+            .op_set_global => "OP_SET_GLOBAL",
             .op_equal => "OP_EQUAL",
             .op_greater => "OP_GREATER",
             .op_less => "OP_LESS",
@@ -36,6 +45,7 @@ pub const OpCode = enum(u8) {
             .op_divide => "OP_DIVIDE",
             .op_not => "OP_NOT",
             .op_negate => "OP_NEGATE",
+            .op_print => "OP_PRINT",
             .op_return => "OP_RETURN",
         };
     }
@@ -97,7 +107,7 @@ pub const Chunk = struct {
 
         const instruction = @as(OpCode, @enumFromInt(self.code.items[offset]));
         return switch (instruction) {
-            .op_constant => blk: {
+            .op_constant, .op_get_global, .op_define_global, .op_set_global => blk: {
                 const constant = self.code.items[offset + 1];
                 // TODO: figure out how to hold Writer types in structs
                 std.debug.print("{s: <16} {d: >4} ", .{ instruction.asString(), constant });
@@ -107,7 +117,7 @@ pub const Chunk = struct {
 
                 break :blk offset + 2;
             },
-            .op_nil, .op_true, .op_false, .op_equal, .op_greater, .op_less, .op_add, .op_subtract, .op_multiply, .op_divide, .op_not, .op_negate, .op_return => blk: {
+            .op_nil, .op_true, .op_false, .op_pop, .op_equal, .op_greater, .op_less, .op_add, .op_subtract, .op_multiply, .op_divide, .op_not, .op_negate, .op_print, .op_return => blk: {
                 // TODO: figure out how to hold Writer types in structs
                 std.debug.print("{s}\n", .{instruction.asString()});
 
